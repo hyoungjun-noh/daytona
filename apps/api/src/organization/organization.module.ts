@@ -5,29 +5,28 @@
 
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
-import { OrganizationController } from './controllers/organization.controller'
-import { OrganizationRoleController } from './controllers/organization-role.controller'
-import { DefaultRegionController } from './controllers/default-region.controller'
-import { OrganizationUserController } from './controllers/organization-user.controller'
-import { OrganizationInvitationController } from './controllers/organization-invitation.controller'
-import { Organization } from './entities/organization.entity'
-import { OrganizationRole } from './entities/organization-role.entity'
-import { OrganizationUser } from './entities/organization-user.entity'
-import { OrganizationInvitation } from './entities/organization-invitation.entity'
-import { OrganizationService } from './services/organization.service'
-import { OrganizationRoleService } from './services/organization-role.service'
-import { OrganizationUserService } from './services/organization-user.service'
-import { OrganizationInvitationService } from './services/organization-invitation.service'
-import { UserModule } from '../user/user.module'
+import { RegionModule } from '../region/region.module'
+import { RedisLockProvider } from '../sandbox/common/redis-lock.provider'
 import { Sandbox } from '../sandbox/entities/sandbox.entity'
+import { SnapshotRunner } from '../sandbox/entities/snapshot-runner.entity'
 import { Snapshot } from '../sandbox/entities/snapshot.entity'
 import { Volume } from '../sandbox/entities/volume.entity'
-import { RedisLockProvider } from '../sandbox/common/redis-lock.provider'
-import { SnapshotRunner } from '../sandbox/entities/snapshot-runner.entity'
-import { OrganizationUsageService } from './services/organization-usage.service'
-import { RegionQuota } from './entities/region-quota.entity'
-import { RegionModule } from '../region/region.module'
+import { UserModule } from '../user/user.module'
+import { OrganizationInvitationController } from './controllers/organization-invitation.controller'
+import { OrganizationRoleController } from './controllers/organization-role.controller'
+import { OrganizationUserController } from './controllers/organization-user.controller'
+import { OrganizationController } from './controllers/organization.controller'
 import { RegionController } from './controllers/region.controller'
+import { OrganizationInvitation } from './entities/organization-invitation.entity'
+import { OrganizationRole } from './entities/organization-role.entity'
+import { OrganizationUser } from './entities/organization-user.entity'
+import { Organization } from './entities/organization.entity'
+import { RegionQuota } from './entities/region-quota.entity'
+import { OrganizationInvitationService } from './services/organization-invitation.service'
+import { OrganizationRoleService } from './services/organization-role.service'
+import { OrganizationUsageService } from './services/organization-usage.service'
+import { OrganizationUserService } from './services/organization-user.service'
+import { OrganizationService } from './services/organization.service'
 
 @Module({
   imports: [
@@ -51,7 +50,6 @@ import { RegionController } from './controllers/region.controller'
     OrganizationUserController,
     OrganizationInvitationController,
     RegionController,
-    DefaultRegionController,
   ],
   providers: [
     OrganizationService,
@@ -69,4 +67,4 @@ import { RegionController } from './controllers/region.controller'
     OrganizationUsageService,
   ],
 })
-export class OrganizationModule { }
+export class OrganizationModule {}

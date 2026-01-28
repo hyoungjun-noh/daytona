@@ -153,6 +153,14 @@ func (d *DockerClient) BuildImage(ctx context.Context, buildImageDto dto.BuildSn
 			}
 			authConfigs["https://"+sourceRegistry.Url] = authConfig
 			authConfigs["http://"+sourceRegistry.Url] = authConfig
+
+			if d.logWriter != nil {
+				fmt.Fprintf(d.logWriter, "  SourceRegistries Url: %s, UserName: %s\n", sourceRegistry.Url, sourceRegistry.Username)
+			}
+		}
+	} else {
+		if d.logWriter != nil {
+			fmt.Fprintf(d.logWriter, "buildImageDto.SourceRegistries is nil\n")
 		}
 	}
 
