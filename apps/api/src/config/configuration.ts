@@ -301,8 +301,8 @@ const configuration = {
     candidateLimit: parseInt(process.env.WARM_POOL_CANDIDATE_LIMIT || '300', 10),
   },
   snapshot: {
-    deactivationDays: parseInt(process.env.SNAPSHOT_DEACTIVATION_DAYS || '14', 10),
-    buildInfoRetentionDays: parseInt(process.env.SNAPSHOT_BUILDINFO_RETENTION_DAYS || '1', 10),
+    deactivationTtl: process.env.SNAPSHOT_DEACTIVATION_TTL || '14d',
+    buildInfoRetentionTtl: process.env.SNAPSHOT_BUILDINFO_RETENTION_TTL || '1d',
   },
 }
 

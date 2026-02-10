@@ -35,6 +35,7 @@ import { SnapshotCreatedEvent } from '../events/snapshot-created.event'
 import { SnapshotService } from '../services/snapshot.service'
 import { OnAsyncEvent } from '../../common/decorators/on-async-event.decorator'
 import { parseDockerImage } from '../../common/utils/docker-image.util'
+import { parseDuration } from '../../common/utils/parse-duration'
 import { ConfigService } from '@nestjs/config'
 
 const SYNC_AGAIN = 'sync-again'
@@ -914,8 +915,13 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const buildInfoRetentionDays = this.configService.get<number>('snapshot.buildInfoRetentionDays') ?? 1
-      const buildInfoCutoff = new Date(Date.now() - buildInfoRetentionDays * 24 * 60 * 60 * 1000)
+      const retentionTtl = this.configService.get<string>('snapshot.buildInfoRetentionTtl') ?? '1d'
+      const retentionMs = parseDuration(retentionTtl)
+      const buildInfoCutoff = new Date(Date.now() - retentionMs)
+
+      this.logger.debug(
+        `[cleanup-buildinfo] retention=${retentionTtl} (${retentionMs}ms), cutoff=${buildInfoCutoff.toISOString()}`,
+      )
 
       // Find all BuildInfo entities that haven't been used past the retention period
       const oldBuildInfos = await this.buildInfoRepository.find({
@@ -925,6 +931,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
       })
 
       if (oldBuildInfos.length === 0) {
+        this.logger.debug(`[cleanup-buildinfo] no expired BuildInfo entries found`)
         return
       }
 
@@ -935,9 +942,9 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
         { state: SnapshotRunnerState.REMOVING },
       )
 
-      if (result.affected > 0) {
-        this.logger.debug(`Marked ${result.affected} SnapshotRunners for removal due to unused BuildInfo`)
-      }
+      this.logger.debug(
+        `[cleanup-buildinfo] found ${oldBuildInfos.length} expired BuildInfo entries, marked ${result.affected} SnapshotRunners for removal`,
+      )
     } catch (error) {
       this.logger.error(`Failed to mark old BuildInfo SnapshotRunners for removal: ${fromAxiosError(error)}`)
     } finally {
@@ -956,8 +963,13 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const deactivationDays = this.configService.get<number>('snapshot.deactivationDays') ?? 14
-      const cutoffDate = new Date(Date.now() - deactivationDays * 24 * 60 * 60 * 1000)
+      const deactivationTtl = this.configService.get<string>('snapshot.deactivationTtl') ?? '14d'
+      const deactivationMs = parseDuration(deactivationTtl)
+      const cutoffDate = new Date(Date.now() - deactivationMs)
+
+      this.logger.debug(
+        `[deactivate-snapshots] ttl=${deactivationTtl} (${deactivationMs}ms), cutoff=${cutoffDate.toISOString()}`,
+      )
 
       const oldSnapshots = await this.snapshotRepository
         .createQueryBuilder('snapshot')
@@ -985,6 +997,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
         .getMany()
 
       if (oldSnapshots.length === 0) {
+        this.logger.debug(`[deactivate-snapshots] no expired snapshots found`)
         return
       }
 
@@ -1003,7 +1016,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
         )
 
         this.logger.debug(
-          `Deactivated ${oldSnapshots.length} snapshots and marked ${result.affected} SnapshotRunners for removal`,
+          `[deactivate-snapshots] deactivated ${oldSnapshots.length} snapshots, marked ${result.affected} SnapshotRunners for removal (refs: ${refs.join(', ')})`,
         )
       }
     } catch (error) {
