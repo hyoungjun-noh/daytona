@@ -35,6 +35,7 @@ import { SnapshotCreatedEvent } from '../events/snapshot-created.event'
 import { SnapshotService } from '../services/snapshot.service'
 import { OnAsyncEvent } from '../../common/decorators/on-async-event.decorator'
 import { parseDockerImage } from '../../common/utils/docker-image.util'
+import { ConfigService } from '@nestjs/config'
 
 const SYNC_AGAIN = 'sync-again'
 const DONT_SYNC_AGAIN = 'dont-sync-again'
@@ -65,6 +66,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     private readonly redisLockProvider: RedisLockProvider,
     private readonly organizationService: OrganizationService,
     private readonly snapshotService: SnapshotService,
+    private readonly configService: ConfigService,
   ) {}
 
   async onApplicationShutdown() {
@@ -912,13 +914,13 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+      const buildInfoRetentionDays = this.configService.get<number>('snapshot.buildInfoRetentionDays') ?? 1
+      const buildInfoCutoff = new Date(Date.now() - buildInfoRetentionDays * 24 * 60 * 60 * 1000)
 
-      // Find all BuildInfo entities that haven't been used in over a day
+      // Find all BuildInfo entities that haven't been used past the retention period
       const oldBuildInfos = await this.buildInfoRepository.find({
         where: {
-          lastUsedAt: LessThan(oneDayAgo),
+          lastUsedAt: LessThan(buildInfoCutoff),
         },
       })
 
@@ -954,14 +956,15 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const twoWeeksAgo = new Date(Date.now() - 14 * 1000 * 60 * 60 * 24)
+      const deactivationDays = this.configService.get<number>('snapshot.deactivationDays') ?? 14
+      const cutoffDate = new Date(Date.now() - deactivationDays * 24 * 60 * 60 * 1000)
 
       const oldSnapshots = await this.snapshotRepository
         .createQueryBuilder('snapshot')
         .where('snapshot.general = false')
         .andWhere('snapshot.state = :snapshotState', { snapshotState: SnapshotState.ACTIVE })
-        .andWhere('(snapshot."lastUsedAt" IS NULL OR snapshot."lastUsedAt" < :twoWeeksAgo)', { twoWeeksAgo })
-        .andWhere('snapshot."createdAt" < :twoWeeksAgo', { twoWeeksAgo })
+        .andWhere('(snapshot."lastUsedAt" IS NULL OR snapshot."lastUsedAt" < :cutoffDate)', { cutoffDate })
+        .andWhere('snapshot."createdAt" < :cutoffDate', { cutoffDate })
         .andWhere(
           () => {
             const query = this.snapshotRepository
@@ -969,13 +972,13 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
               .select('1')
               .where('s."ref" = snapshot."ref"')
               .andWhere('s.state = :activeState')
-              .andWhere('(s."lastUsedAt" >= :twoWeeksAgo OR s."createdAt" >= :twoWeeksAgo)')
+              .andWhere('(s."lastUsedAt" >= :cutoffDate OR s."createdAt" >= :cutoffDate)')
 
             return `NOT EXISTS (${query.getQuery()})`
           },
           {
             activeState: SnapshotState.ACTIVE,
-            twoWeeksAgo,
+            cutoffDate,
           },
         )
         .take(100)
