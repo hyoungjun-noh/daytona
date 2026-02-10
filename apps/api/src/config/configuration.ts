@@ -300,6 +300,10 @@ const configuration = {
   warmPool: {
     candidateLimit: parseInt(process.env.WARM_POOL_CANDIDATE_LIMIT || '300', 10),
   },
+  snapshot: {
+    deactivationTtl: process.env.SNAPSHOT_DEACTIVATION_TTL || '14d',
+    buildInfoRetentionTtl: process.env.SNAPSHOT_BUILDINFO_RETENTION_TTL || '1d',
+  },
 }
 
 export { configuration }

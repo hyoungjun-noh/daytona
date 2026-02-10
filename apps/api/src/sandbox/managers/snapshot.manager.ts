@@ -35,6 +35,8 @@ import { SnapshotCreatedEvent } from '../events/snapshot-created.event'
 import { SnapshotService } from '../services/snapshot.service'
 import { OnAsyncEvent } from '../../common/decorators/on-async-event.decorator'
 import { parseDockerImage } from '../../common/utils/docker-image.util'
+import { parseDuration } from '../../common/utils/parse-duration'
+import { ConfigService } from '@nestjs/config'
 
 const SYNC_AGAIN = 'sync-again'
 const DONT_SYNC_AGAIN = 'dont-sync-again'
@@ -65,6 +67,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     private readonly redisLockProvider: RedisLockProvider,
     private readonly organizationService: OrganizationService,
     private readonly snapshotService: SnapshotService,
+    private readonly configService: ConfigService,
   ) {}
 
   async onApplicationShutdown() {
@@ -912,17 +915,23 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const oneDayAgo = new Date()
-      oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+      const retentionTtl = this.configService.get<string>('snapshot.buildInfoRetentionTtl') ?? '1d'
+      const retentionMs = parseDuration(retentionTtl)
+      const buildInfoCutoff = new Date(Date.now() - retentionMs)
 
-      // Find all BuildInfo entities that haven't been used in over a day
+      this.logger.debug(
+        `[cleanup-buildinfo] retention=${retentionTtl} (${retentionMs}ms), cutoff=${buildInfoCutoff.toISOString()}`,
+      )
+
+      // Find all BuildInfo entities that haven't been used past the retention period
       const oldBuildInfos = await this.buildInfoRepository.find({
         where: {
-          lastUsedAt: LessThan(oneDayAgo),
+          lastUsedAt: LessThan(buildInfoCutoff),
         },
       })
 
       if (oldBuildInfos.length === 0) {
+        this.logger.debug(`[cleanup-buildinfo] no expired BuildInfo entries found`)
         return
       }
 
@@ -933,9 +942,9 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
         { state: SnapshotRunnerState.REMOVING },
       )
 
-      if (result.affected > 0) {
-        this.logger.debug(`Marked ${result.affected} SnapshotRunners for removal due to unused BuildInfo`)
-      }
+      this.logger.debug(
+        `[cleanup-buildinfo] found ${oldBuildInfos.length} expired BuildInfo entries, marked ${result.affected} SnapshotRunners for removal`,
+      )
     } catch (error) {
       this.logger.error(`Failed to mark old BuildInfo SnapshotRunners for removal: ${fromAxiosError(error)}`)
     } finally {
@@ -954,14 +963,20 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     }
 
     try {
-      const twoWeeksAgo = new Date(Date.now() - 14 * 1000 * 60 * 60 * 24)
+      const deactivationTtl = this.configService.get<string>('snapshot.deactivationTtl') ?? '14d'
+      const deactivationMs = parseDuration(deactivationTtl)
+      const cutoffDate = new Date(Date.now() - deactivationMs)
+
+      this.logger.debug(
+        `[deactivate-snapshots] ttl=${deactivationTtl} (${deactivationMs}ms), cutoff=${cutoffDate.toISOString()}`,
+      )
 
       const oldSnapshots = await this.snapshotRepository
         .createQueryBuilder('snapshot')
         .where('snapshot.general = false')
         .andWhere('snapshot.state = :snapshotState', { snapshotState: SnapshotState.ACTIVE })
-        .andWhere('(snapshot."lastUsedAt" IS NULL OR snapshot."lastUsedAt" < :twoWeeksAgo)', { twoWeeksAgo })
-        .andWhere('snapshot."createdAt" < :twoWeeksAgo', { twoWeeksAgo })
+        .andWhere('(snapshot."lastUsedAt" IS NULL OR snapshot."lastUsedAt" < :cutoffDate)', { cutoffDate })
+        .andWhere('snapshot."createdAt" < :cutoffDate', { cutoffDate })
         .andWhere(
           () => {
             const query = this.snapshotRepository
@@ -969,19 +984,20 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
               .select('1')
               .where('s."ref" = snapshot."ref"')
               .andWhere('s.state = :activeState')
-              .andWhere('(s."lastUsedAt" >= :twoWeeksAgo OR s."createdAt" >= :twoWeeksAgo)')
+              .andWhere('(s."lastUsedAt" >= :cutoffDate OR s."createdAt" >= :cutoffDate)')
 
             return `NOT EXISTS (${query.getQuery()})`
           },
           {
             activeState: SnapshotState.ACTIVE,
-            twoWeeksAgo,
+            cutoffDate,
           },
         )
         .take(100)
         .getMany()
 
       if (oldSnapshots.length === 0) {
+        this.logger.debug(`[deactivate-snapshots] no expired snapshots found`)
         return
       }
 
@@ -1000,7 +1016,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
         )
 
         this.logger.debug(
-          `Deactivated ${oldSnapshots.length} snapshots and marked ${result.affected} SnapshotRunners for removal`,
+          `[deactivate-snapshots] deactivated ${oldSnapshots.length} snapshots, marked ${result.affected} SnapshotRunners for removal (refs: ${refs.join(', ')})`,
         )
       }
     } catch (error) {
