@@ -1,0 +1,88 @@
+# OpenSpec Configuration for Daytona
+# Daytona: Open-source infrastructure platform for securely running AI-generated code
+
+project:
+  name: daytona
+  description: >
+    Secure, elastic infrastructure for executing AI-generated code.
+    Provides sub-90ms sandbox creation, isolated runtime environments,
+    and programmatic control via File, Git, LSP, and Execute APIs.
+  repository: https://github.com/daytonaio/daytona
+
+architecture:
+  type: monorepo
+  build_system: nx
+  languages:
+    - go
+    - typescript
+    - python
+    - ruby
+
+domains:
+  # Core backend services (Go)
+  - name: api
+    path: apps/api
+    description: NestJS REST API server
+    language: typescript
+
+  - name: cli
+    path: apps/cli
+    description: Go CLI tool for managing Daytona
+    language: go
+
+  - name: daemon
+    path: apps/daemon
+    description: In-sandbox daemon service (toolbox)
+    language: go
+
+  - name: runner
+    path: apps/runner
+    description: Code execution runtime
+    language: go
+
+  - name: proxy
+    path: apps/proxy
+    description: Network proxy service
+    language: go
+
+  - name: snapshot-manager
+    path: apps/snapshot-manager
+    description: Sandbox snapshot management
+    language: go
+
+  - name: ssh-gateway
+    path: apps/ssh-gateway
+    description: SSH gateway for sandbox access
+    language: go
+
+  - name: dashboard
+    path: apps/dashboard
+    description: React web UI
+    language: typescript
+
+  # SDKs
+  - name: sdk-python
+    path: libs/sdk-python
+    description: Python SDK
+    language: python
+
+  - name: sdk-typescript
+    path: libs/sdk-typescript
+    description: TypeScript SDK
+    language: typescript
+
+  - name: sdk-go
+    path: libs/sdk-go
+    description: Go SDK
+    language: go
+
+  - name: sdk-ruby
+    path: libs/sdk-ruby
+    description: Ruby SDK
+    language: ruby
+
+conventions:
+  commit_style: conventional
+  test_command: nx test
+  build_command: nx build
+  lint_command: nx lint
